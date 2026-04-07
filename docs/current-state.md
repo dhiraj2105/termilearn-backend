@@ -4,7 +4,8 @@
 
 - **Phase 1: Project Setup and Structure** — Completed
 - **Phase 2: Database and Models** — Completed
-- **Phase 3: User Authentication** — Not started
+- **Phase 3: User Authentication** — Completed
+- **Phase 4: Terminal Management with Docker** — Not started
 
 ## Implemented Components
 
@@ -35,12 +36,28 @@
   - `commandHistory` tracking
   - Command history update logging
 
-### Routes and Controllers
+### Authentication
+
+- `src/controllers/authController.js`
+  - `register` function with input validation and JWT generation
+  - `login` function with credential verification
+  - `getProfile` function for protected user data retrieval
+  - `updateProfile` function for user profile updates
+
+- `src/middleware/auth.js`
+  - `protect` middleware for JWT verification
+  - `authorize` middleware for role-based access control
+
+- `src/middleware/validation.js`
+  - Input validation using express-validator
+  - Registration and login validation rules
+  - Error handling for validation failures
 
 - `src/routes/authRoutes.js`
-- `src/routes/terminalRoutes.js`
-- `src/controllers/authController.js`
-- `src/controllers/terminalController.js`
+  - POST `/api/auth/register` - User registration
+  - POST `/api/auth/login` - User login
+  - GET `/api/auth/profile` - Protected user profile (requires JWT)
+  - PUT `/api/auth/profile` - Update user profile (requires JWT)
 
 ### Logging
 

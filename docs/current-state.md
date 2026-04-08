@@ -7,6 +7,8 @@
 - **Phase 3: User Authentication** — Completed
 - **Phase 4: Terminal Management with Docker** — Completed
 - **Phase 5: WebSocket for Real-time Terminal** — Completed
+- **Phase 6: Command Monitoring and Safety** — Completed
+- **Phase 7: Auto Cleanup Mechanism** — Not started
 
 ## Implemented Components
 
@@ -99,7 +101,24 @@
 
 ## Next Backend Action
 
-- Phase 6: Command Monitoring and Safety - Add safety checks, command validation, and audit logging
+- Phase 7: Auto Cleanup Mechanism - Implement timeout cleanup, orphan cleanup, and session lifecycle enforcement
+
+## Phase 6 Features Summary
+
+1. **Command Safety Validation**
+   - Blocked dangerous commands such as `rm -rf`, `sudo`, `su`, `chown`, `chmod`, `mount`, `dd`, and network tools
+   - Allowed suspicious commands with warning-level monitoring
+   - Validation applied to both REST and WebSocket terminal command paths
+
+2. **Audit Logging**
+   - `CommandAuditLog` model captures command origin, status, reason, output, and exit code
+   - REST and WebSocket executions both write audit entries
+   - Session audit retrieval available via `GET /api/terminal/:sessionId/audit`
+
+3. **Resource Monitoring**
+   - Container metrics now available in terminal status responses
+   - `cpuPercent`, `memoryUsage`, `memoryLimit`, and `memoryPercent` are exposed
+   - Monitoring supports safer session management and diagnostics
 
 ## Phase 5 Features Summary
 

@@ -2,11 +2,14 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import dotenv from "dotenv";
+import { createServer } from "http";
+import { Server } from "socket.io";
 import connectDB from "./config/database.js";
 import authRoutes from "./routes/authRoutes.js";
 import terminalRoutes from "./routes/terminalRoutes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { info, error } from "./utils/logger.js";
+import { setupTerminalWebSocket } from "./utils/websocket.js";
 
 // Load environment variables
 dotenv.config();
@@ -52,11 +55,26 @@ app.use("*", (req, res) => {
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
+// Create HTTP server and Socket.io
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    credentials: true,
+  },
+});
+
+// Socket.io connection handling
+setupTerminalWebSocket(io);
+
 let server;
 
 const startServer = () => {
-  server = app.listen(PORT, () => {
-    info(`Server running in ${process.env.NODE_ENV || "development"} mode on port ${PORT}`);
+  server = httpServer.listen(PORT, () => {
+    info(
+      `Server running in ${process.env.NODE_ENV || "development"} mode on port ${PORT}`,
+    );
+    info(`WebSocket server ready for real-time terminal connections`);
   });
 };
 
@@ -75,5 +93,8 @@ process.on("uncaughtException", (err) => {
   error("Uncaught Exception:", err);
   process.exit(1);
 });
+
+// Socket.io connection handling
+setupTerminalWebSocket(io);
 
 startServer();

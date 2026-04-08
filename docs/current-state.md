@@ -6,7 +6,7 @@
 - **Phase 2: Database and Models** — Completed
 - **Phase 3: User Authentication** — Completed
 - **Phase 4: Terminal Management with Docker** — Completed
-- **Phase 5: WebSocket for Real-time Terminal** — Not started
+- **Phase 5: WebSocket for Real-time Terminal** — Completed
 
 ## Implemented Components
 
@@ -99,7 +99,28 @@
 
 ## Next Backend Action
 
-- Phase 5: WebSocket for Real-time Terminal - Implement Socket.io integration for live terminal interaction
+- Phase 6: Command Monitoring and Safety - Add safety checks, command validation, and audit logging
+
+## Phase 5 Features Summary
+
+1. **WebSocket Integration**
+   - Socket.io server integrated with Express
+   - JWT authentication for WebSocket connections
+   - Session room isolation for realtime terminal access
+
+2. **Real-time Terminal Interaction**
+   - `authenticate`, `join-terminal`, `terminal-command`, `heartbeat`
+   - Streaming stdout/stderr output to clients
+   - Command lifecycle events: `command-start`, `command-output`, `command-complete`
+
+3. **Session Ownership and Security**
+   - User-scoped session verification
+   - Only authenticated session owners can join and execute commands
+   - Connection cleanup on disconnect
+
+4. **Command History Persistence**
+   - Command output and exit codes saved in `TerminalSession`
+   - Real-time output is streamed while history is retained
 
 ## Phase 4 Features Summary
 

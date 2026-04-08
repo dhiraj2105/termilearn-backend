@@ -5,7 +5,8 @@
 - **Phase 1: Project Setup and Structure** — Completed
 - **Phase 2: Database and Models** — Completed
 - **Phase 3: User Authentication** — Completed
-- **Phase 4: Terminal Management with Docker** — Not started
+- **Phase 4: Terminal Management with Docker** — Completed
+- **Phase 5: WebSocket for Real-time Terminal** — Not started
 
 ## Implemented Components
 
@@ -59,6 +60,36 @@
   - GET `/api/auth/profile` - Protected user profile (requires JWT)
   - PUT `/api/auth/profile` - Update user profile (requires JWT)
 
+### Docker Terminal Management
+
+- `src/utils/docker.js`
+  - Docker client initialization with Dockerode
+  - Container image handling (Alpine Linux)
+  - `ensureImageExists()` - Pull/verify Docker image availability
+  - `createContainer()` - Spin up isolated Alpine containers with resource limits
+  - `executeCommand()` - Run commands inside containers with timeout
+  - `getContainerStatus()` - Check container health and status
+  - `deleteContainer()` - Stop and remove containers
+  - `cleanupUserContainers()` - Clean up all user's containers
+  - `listUserContainers()` - List active containers per user
+  - `checkDockerHealth()` - Verify Docker daemon connectivity
+
+- `src/controllers/terminalController.js`
+  - `createTerminal()` - Create new terminal session with container
+  - `deleteTerminal()` - Terminate terminal and cleanup container
+  - `executeCommand()` - Execute commands in terminal session
+  - `getTerminalStatus()` - Get session status and container health
+  - `listActiveSessions()` - List user's active terminals
+  - `getCommandHistory()` - Retrieve command execution history
+
+- `src/routes/terminalRoutes.js`
+  - POST `/api/terminal/create` - Create new terminal session (requires JWT)
+  - DELETE `/api/terminal/:sessionId` - Terminate session (requires JWT)
+  - GET `/api/terminal/:sessionId` - Get session status (requires JWT)
+  - POST `/api/terminal/:sessionId/execute` - Execute command (requires JWT)
+  - GET `/api/terminal/list` - List active sessions (requires JWT)
+  - GET `/api/terminal/:sessionId/history` - Get command history (requires JWT)
+
 ### Logging
 
 - Console logging kept as requested
@@ -68,9 +99,43 @@
 
 ## Next Backend Action
 
-- Phase 3 should begin with authentication routes, JWT, registration, and login
+- Phase 5: WebSocket for Real-time Terminal - Implement Socket.io integration for live terminal interaction
+
+## Phase 4 Features Summary
+
+1. **Docker Container Management**
+   - Isolated Alpine Linux containers per user session
+   - Resource limits: 256MB RAM, CPU shares, PID limits
+   - Security: No privilege escalation, no new privileges
+   - 30-minute session timeout with auto-cleanup
+
+2. **Terminal Session Lifecycle**
+   - Session creation with Docker container setup
+   - Command execution with 5-second timeout
+   - Command history tracking in database
+   - Heartbeat monitoring for active sessions
+   - Graceful termination and cleanup
+
+3. **API Features**
+   - JWT-protected all terminal endpoints
+   - User-scoped terminal isolation
+   - Comprehensive error handling
+   - Structured logging of all operations
+   - Session ownership validation
+
+## Phase 4 Implementation Details
+
+- **Docker Image**: Alpine Linux (lightweight, ~7MB)
+- **Container Memory Limit**: 256MB
+- **Container CPU Limit**: 512 shares
+- **Max Processes**: 100 per container
+- **Session Duration**: 30 minutes with expiration
+- **Command Timeout**: 5 seconds per command
+- **Container Prefix**: termilearn-{userId}-{timestamp}
 
 ## Notes
 
-- Structured logging is now persisted to disk as JSON lines
-- Documentation folder created at `termilearn-backend/docs`
+- Docker daemon must be running and accessible
+- All containers are automatically cleaned up on session expiration
+- Command history is persisted in MongoDB
+- Containers run in isolated network (bridge mode)

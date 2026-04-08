@@ -1,13 +1,41 @@
-import { TerminalSession } from "../models/index.js";
+import { TerminalSession, CommandAuditLog } from "../models/index.js";
 import {
   createContainer,
   deleteContainer,
   executeCommand as runCommand,
   getContainerStatus,
+  getContainerMetrics,
   listUserContainers,
   cleanupUserContainers,
 } from "../utils/docker.js";
-import { info, error } from "../utils/logger.js";
+import { info, warn, error } from "../utils/logger.js";
+import { validateCommand } from "../utils/commandSafety.js";
+
+const createCommandAudit = async ({
+  user,
+  session,
+  command,
+  origin,
+  status,
+  reason,
+  output,
+  exitCode,
+}) => {
+  try {
+    await CommandAuditLog.create({
+      user,
+      session,
+      command,
+      origin,
+      status,
+      reason,
+      output: output ? output.toString().slice(0, 2000) : "",
+      exitCode,
+    });
+  } catch (err) {
+    error("Failed to create command audit log:", err);
+  }
+};
 
 /**
  * @desc    Create a new terminal session
@@ -104,10 +132,17 @@ export const getTerminalStatus = async (req, res) => {
       });
     }
 
-    // Get container status
+    // Get container status and metrics
     const containerStatus = await getContainerStatus(
       terminalSession.containerId,
     );
+    let containerMetrics = null;
+
+    try {
+      containerMetrics = await getContainerMetrics(terminalSession.containerId);
+    } catch (metricsErr) {
+      error(`Failed to retrieve container metrics:`, metricsErr);
+    }
 
     // Update last heartbeat
     await TerminalSession.findByIdAndUpdate(sessionId, {
@@ -131,6 +166,7 @@ export const getTerminalStatus = async (req, res) => {
         timeRemainingSeconds: timeRemaining,
         commandCount: terminalSession.commandHistory.length,
         containerStatus: containerStatus.status,
+        containerMetrics,
       },
     });
   } catch (err) {
@@ -179,6 +215,31 @@ export const executeCommand = async (req, res) => {
       });
     }
 
+    const safety = validateCommand(command);
+
+    if (!safety.allowed) {
+      await createCommandAudit({
+        user: userId,
+        session: sessionId,
+        command,
+        origin: "rest",
+        status: "blocked",
+        reason: safety.reason,
+        output: "",
+        exitCode: null,
+      });
+
+      return res.status(403).json({
+        success: false,
+        message: "Command blocked for safety reasons",
+        reason: safety.reason,
+      });
+    }
+
+    if (safety.severity === "warning") {
+      warn(`Command warning: ${command} — ${safety.reason}`);
+    }
+
     // Check if session expired
     if (new Date() > terminalSession.expiresAt) {
       await TerminalSession.findByIdAndUpdate(sessionId, {
@@ -205,6 +266,16 @@ export const executeCommand = async (req, res) => {
     });
 
     await terminalSession.save();
+    await createCommandAudit({
+      user: userId,
+      session: sessionId,
+      command,
+      origin: "rest",
+      status: safety.severity === "warning" ? "warning" : "allowed",
+      reason: safety.reason,
+      output: result.stdout || result.stderr,
+      exitCode: result.exitCode,
+    });
 
     info(
       `Command executed in session ${sessionId} with exit code ${result.exitCode}`,
@@ -394,6 +465,58 @@ export const getCommandHistory = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to get command history",
+      error: err.message,
+    });
+  }
+};
+
+/**
+ * @desc    Get audit log for terminal session
+ * @route   GET /api/terminal/:sessionId/audit
+ * @access  Private
+ */
+export const getAuditLog = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { sessionId } = req.params;
+
+    const terminalSession = await TerminalSession.findById(sessionId);
+
+    if (!terminalSession) {
+      return res.status(404).json({
+        success: false,
+        message: "Terminal session not found",
+      });
+    }
+
+    if (terminalSession.user.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to access this audit log",
+      });
+    }
+
+    const auditEntries = await CommandAuditLog.find({
+      session: sessionId,
+      user: userId,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      message: "Audit log retrieved successfully",
+      data: {
+        sessionId,
+        auditCount: auditEntries.length,
+        auditEntries,
+      },
+    });
+  } catch (err) {
+    error(`Failed to get audit log:`, err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get audit log",
       error: err.message,
     });
   }

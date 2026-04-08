@@ -113,12 +113,100 @@ export const createContainer = async (userId) => {
 };
 
 /**
- * Execute a command in a container
+ * Execute a command in a container with real-time streaming
  * @param {string} containerId - The container ID from our system (not Docker ID)
  * @param {string} command - The command to execute
+ * @param {function} onData - Callback for data chunks (data, isStdout)
+ * @param {function} onEnd - Callback when execution ends (exitCode)
+ * @param {function} onError - Callback for errors
  * @param {number} timeout - Timeout in milliseconds (default 5000)
- * @returns {Promise<Object>} Command output and exit code
  */
+export const executeCommandStream = async (
+  containerId,
+  command,
+  onData,
+  onEnd,
+  onError,
+  timeout = 5000,
+) => {
+  try {
+    // Find container by our ID format
+    const containers = await docker.listContainers({ all: true });
+    const dockerContainer = containers.find(
+      (c) =>
+        c.Names[0].includes(containerId) || c.Labels?.["termilearn.userId"],
+    );
+
+    if (!dockerContainer) {
+      throw new Error(`Container not found: ${containerId}`);
+    }
+
+    const container = docker.getContainer(dockerContainer.Id);
+
+    info(`Streaming command execution in container ${containerId}: ${command}`);
+
+    // Create execution instance
+    const exec = await container.exec({
+      Cmd: ["/bin/sh", "-c", command],
+      AttachStdin: false,
+      AttachStdout: true,
+      AttachStderr: true,
+      Tty: false,
+    });
+
+    // Execute with timeout
+    const executePromise = exec.start({ Detach: false, Tty: false });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Command execution timeout")), timeout),
+    );
+
+    const stream = await Promise.race([executePromise, timeoutPromise]);
+
+    // Handle streaming output
+    stream.on("data", (chunk) => {
+      // Docker multiplexes stdout and stderr
+      // First byte indicates stream type: 0x01 = stdout, 0x02 = stderr
+      const firstByte = chunk[0];
+      const data = chunk.slice(1).toString();
+
+      if (firstByte === 1) {
+        onData(data, true); // stdout
+      } else if (firstByte === 2) {
+        onData(data, false); // stderr
+      } else {
+        onData(data, true); // fallback to stdout
+      }
+    });
+
+    stream.on("error", (err) => {
+      error(`Stream error in container ${containerId}:`, err);
+      onError(err);
+    });
+
+    stream.on("end", async () => {
+      try {
+        // Get exit code
+        const inspect = await exec.inspect();
+        const exitCode = inspect.ExitCode;
+
+        info(
+          `Streaming command completed with exit code ${exitCode} in container ${containerId}`,
+        );
+
+        onEnd(exitCode);
+      } catch (err) {
+        error(`Failed to get exit code for container ${containerId}:`, err);
+        onError(err);
+      }
+    });
+  } catch (err) {
+    error(
+      `Failed to execute streaming command in container ${containerId}:`,
+      err,
+    );
+    onError(err);
+  }
+};
 export const executeCommand = async (containerId, command, timeout = 5000) => {
   try {
     // Find container by our ID format

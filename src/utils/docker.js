@@ -318,6 +318,134 @@ export const getContainerStatus = async (containerId) => {
   }
 };
 
+// export const getContainerMetrics = async (containerId) => {
+//   try {
+//     const containers = await docker.listContainers({ all: true });
+//     const dockerContainer = containers.find(
+//       (c) =>
+//         c.Names[0].includes(containerId) || c.Labels?.["termilearn.userId"],
+//     );
+
+//     if (!dockerContainer) {
+//       return {
+//         message: "Container not found",
+//         containerId,
+//       };
+//     }
+
+//     const container = docker.getContainer(dockerContainer.Id);
+//     const statsStream = await new Promise((resolve, reject) => {
+//       container.stats({ stream: false }, (err, stream) => {
+//         if (err) {
+//           reject(err);
+//           return;
+//         }
+//         resolve(stream);
+//       });
+//     });
+
+//     const chunks = [];
+//     return await new Promise((resolve, reject) => {
+//       statsStream.on("data", (chunk) => chunks.push(chunk));
+//       statsStream.on("end", () => {
+//         try {
+//           const raw = JSON.parse(Buffer.concat(chunks).toString());
+//           const cpuDelta =
+//             raw.cpu_stats.cpu_usage.total_usage -
+//             raw.precpu_stats.cpu_usage.total_usage;
+//           const systemDelta =
+//             raw.cpu_stats.system_cpu_usage - raw.precpu_stats.system_cpu_usage;
+//           const cpuPercent =
+//             systemDelta > 0
+//               ? (cpuDelta / systemDelta) * raw.cpu_stats.online_cpus * 100
+//               : 0;
+//           const memoryUsage = raw.memory_stats.usage || 0;
+//           const memoryLimit = raw.memory_stats.limit || 0;
+//           const memoryPercent = memoryLimit
+//             ? (memoryUsage / memoryLimit) * 100
+//             : 0;
+
+//           resolve({
+//             containerId,
+//             cpuPercent: Number(cpuPercent.toFixed(2)),
+//             memoryUsage,
+//             memoryLimit,
+//             memoryPercent: Number(memoryPercent.toFixed(2)),
+//             pidsCurrent: raw.pids_stats?.current || null,
+//             networks: raw.networks || {},
+//             read: raw.read,
+//           });
+//         } catch (parseErr) {
+//           reject(parseErr);
+//         }
+//       });
+//       statsStream.on("error", reject);
+//     });
+//   } catch (err) {
+//     error(`Failed to get container metrics for ${containerId}:`, err);
+//     return {
+//       containerId,
+//       error: err.message,
+//     };
+//   }
+// };
+export const getContainerMetrics = async (containerId) => {
+  try {
+    const containers = await docker.listContainers({ all: true });
+
+    const dockerContainer = containers.find(
+      (c) =>
+        c.Names[0].includes(containerId) || c.Labels?.["termilearn.userId"],
+    );
+
+    if (!dockerContainer) {
+      return {
+        message: "Container not found",
+        containerId,
+      };
+    }
+
+    const container = docker.getContainer(dockerContainer.Id);
+
+    const raw = await container.stats({ stream: false });
+
+    const cpuDelta =
+      raw.cpu_stats.cpu_usage.total_usage -
+      raw.precpu_stats.cpu_usage.total_usage;
+
+    const systemDelta =
+      raw.cpu_stats.system_cpu_usage - raw.precpu_stats.system_cpu_usage;
+
+    const cpuPercent =
+      systemDelta > 0
+        ? (cpuDelta / systemDelta) * raw.cpu_stats.online_cpus * 100
+        : 0;
+
+    const memoryUsage = raw.memory_stats.usage || 0;
+    const memoryLimit = raw.memory_stats.limit || 0;
+
+    const memoryPercent = memoryLimit ? (memoryUsage / memoryLimit) * 100 : 0;
+
+    return {
+      containerId,
+      cpuPercent: Number(cpuPercent.toFixed(2)),
+      memoryUsage,
+      memoryLimit,
+      memoryPercent: Number(memoryPercent.toFixed(2)),
+      pidsCurrent: raw.pids_stats?.current || null,
+      networks: raw.networks || {},
+      read: raw.read,
+    };
+  } catch (err) {
+    error(`Failed to get container metrics for ${containerId}:`, err);
+
+    return {
+      containerId,
+      error: err.message,
+    };
+  }
+};
+
 /**
  * Delete/stop and remove a container
  * @param {string} containerId - The container ID from our system
@@ -467,6 +595,7 @@ export default {
   createContainer,
   executeCommand,
   getContainerStatus,
+  getContainerMetrics,
   deleteContainer,
   cleanupUserContainers,
   listUserContainers,

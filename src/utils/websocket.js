@@ -299,9 +299,10 @@
 
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
-import { info, error } from "./logger.js";
+import { info, warn, error } from "./logger.js";
 import { executeCommandStream } from "./docker.js";
-import TerminalSession from "../models/TerminalSession.js";
+import { validateCommand } from "./commandSafety.js";
+import { TerminalSession, CommandAuditLog } from "../models/index.js";
 
 /**
  * Validate and return session
@@ -327,6 +328,32 @@ const validateSession = async (sessionId, userId) => {
   }
 
   return { session };
+};
+
+const createWebSocketAudit = async ({
+  user,
+  session,
+  command,
+  origin,
+  status,
+  reason,
+  output,
+  exitCode,
+}) => {
+  try {
+    await CommandAuditLog.create({
+      user,
+      session,
+      command,
+      origin,
+      status,
+      reason,
+      output: output ? output.toString().slice(0, 2000) : "",
+      exitCode,
+    });
+  } catch (err) {
+    error("Failed to log websocket audit entry:", err);
+  }
 };
 
 /**
@@ -437,6 +464,36 @@ export const setupTerminalWebSocket = (io) => {
           return;
         }
 
+        const safety = validateCommand(command);
+
+        if (!safety.allowed) {
+          await createWebSocketAudit({
+            user: socket.userId,
+            session: sessionId,
+            command,
+            origin: "websocket",
+            status: "blocked",
+            reason: safety.reason,
+            output: "",
+            exitCode: null,
+          });
+
+          socket.emit("command-error", {
+            message: "Command blocked for safety reasons",
+            reason: safety.reason,
+          });
+          return;
+        }
+
+        if (safety.severity === "warning") {
+          warn(`Command warning: ${command} — ${safety.reason}`);
+          io.to(sessionId).emit("command-warning", {
+            command,
+            reason: safety.reason,
+            timestamp: new Date(),
+          });
+        }
+
         info(`⚡ Executing: ${command}`);
 
         io.to(sessionId).emit("command-start", {
@@ -461,7 +518,7 @@ export const setupTerminalWebSocket = (io) => {
 
               isStdout ? (fullOutput += data) : (fullError += data);
             },
-            (exitCode) => {
+            async (exitCode) => {
               const result = {
                 command,
                 output: fullOutput,
@@ -478,6 +535,16 @@ export const setupTerminalWebSocket = (io) => {
               });
 
               session.save().catch((err) => error("Save history failed:", err));
+              await createWebSocketAudit({
+                user: socket.userId,
+                session: sessionId,
+                command,
+                origin: "websocket",
+                status: safety.severity === "warning" ? "warning" : "allowed",
+                reason: safety.reason,
+                output: fullOutput || fullError,
+                exitCode,
+              });
 
               io.to(sessionId).emit("command-complete", result);
 

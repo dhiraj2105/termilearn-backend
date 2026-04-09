@@ -521,3 +521,32 @@ export const getAuditLog = async (req, res) => {
     });
   }
 };
+
+/**
+ * @desc    Trigger manual cleanup (admin only)
+ * @route   POST /api/terminal/cleanup
+ * @access  Private (Admin)
+ */
+export const triggerCleanup = async (req, res) => {
+  try {
+    // Import cleanup functions
+    const { triggerManualCleanup } = await import("../utils/cleanup.js");
+
+    info("Manual cleanup triggered by admin");
+
+    const result = await triggerManualCleanup();
+
+    res.status(200).json({
+      success: true,
+      message: "Manual cleanup completed successfully",
+      data: result,
+    });
+  } catch (err) {
+    error("Failed to trigger manual cleanup:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to trigger manual cleanup",
+      error: err.message,
+    });
+  }
+};

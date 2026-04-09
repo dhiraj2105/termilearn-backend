@@ -14,7 +14,7 @@ const generateToken = (userId) => {
 // @access  Public
 export const register = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const { username, email, password, role } = req.body;
 
     // Validation
     if (!username || !email || !password) {
@@ -30,6 +30,10 @@ export const register = async (req, res) => {
         message: "Password must be at least 8 characters long",
       });
     }
+
+    // Validate role if provided
+    const validRoles = ["user", "admin"];
+    const userRole = role && validRoles.includes(role) ? role : "user";
 
     // Check if user exists
     const existingUser = await User.findOne({
@@ -51,12 +55,15 @@ export const register = async (req, res) => {
       username: username.trim(),
       email: email.toLowerCase().trim(),
       password,
+      role: userRole,
     });
 
     // Generate token
     const token = generateToken(user._id);
 
-    info(`New user registered: ${user.username} (${user.email})`);
+    info(
+      `New user registered: ${user.username} (${user.email}) with role: ${user.role}`,
+    );
 
     res.status(201).json({
       success: true,

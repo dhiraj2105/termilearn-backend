@@ -570,6 +570,30 @@ export const listUserContainers = async (userId) => {
 };
 
 /**
+ * List all containers (for cleanup operations)
+ * @returns {Promise<Array>} List of all containers
+ */
+export const listAllContainers = async () => {
+  try {
+    const containers = await docker.listContainers({ all: true });
+    info(`Found ${containers.length} total containers`);
+
+    return containers.map((c) => ({
+      Id: c.Id,
+      Names: c.Names,
+      Image: c.Image,
+      State: c.State,
+      Status: c.Status,
+      Created: c.Created,
+      Labels: c.Labels,
+    }));
+  } catch (err) {
+    error("Failed to list all containers:", err);
+    throw new Error(`List all containers failed: ${err.message}`);
+  }
+};
+
+/**
  * Health check - verify Docker daemon is accessible
  */
 export const checkDockerHealth = async () => {
@@ -599,5 +623,6 @@ export default {
   deleteContainer,
   cleanupUserContainers,
   listUserContainers,
+  listAllContainers,
   checkDockerHealth,
 };

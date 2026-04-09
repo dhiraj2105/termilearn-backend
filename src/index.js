@@ -10,6 +10,8 @@ import terminalRoutes from "./routes/terminalRoutes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { info, error } from "./utils/logger.js";
 import { setupTerminalWebSocket } from "./utils/websocket.js";
+import { startAutoCleanup } from "./utils/cleanup.js";
+import { authLimiter, generalLimiter } from "./middleware/rateLimiter.js";
 
 // Load environment variables
 dotenv.config();
@@ -30,6 +32,10 @@ app.use(
 app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+// Rate limiting
+app.use("/api/auth", authLimiter);
+app.use("/api", generalLimiter);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -75,6 +81,9 @@ const startServer = () => {
       `Server running in ${process.env.NODE_ENV || "development"} mode on port ${PORT}`,
     );
     info(`WebSocket server ready for real-time terminal connections`);
+
+    // Start auto cleanup system
+    startAutoCleanup();
   });
 };
 

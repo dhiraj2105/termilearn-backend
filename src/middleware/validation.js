@@ -35,6 +35,11 @@ export const validateRegistration = [
       "Password must contain at least one lowercase letter, one uppercase letter, and one number",
     ),
 
+  body("role")
+    .optional()
+    .isIn(["user", "admin"])
+    .withMessage("Role must be either 'user' or 'admin'"),
+
   handleValidationErrors,
 ];
 

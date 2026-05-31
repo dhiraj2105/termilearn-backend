@@ -26,10 +26,10 @@ async function cleanupExpiredSessions() {
   try {
     info("Starting expired session cleanup");
 
-    const expiredTime = new Date(Date.now() - SESSION_TIMEOUT);
+    const now = new Date();
     const expiredSessions = await TerminalSession.find({
       status: "active",
-      startedAt: { $lt: expiredTime },
+      expiresAt: { $lt: now },
     }).populate("user", "username email");
 
     info(`Found ${expiredSessions.length} expired sessions to clean up`);
@@ -78,7 +78,6 @@ async function cleanupOrphanedContainers() {
 
     // Get all active containers from Docker
     const allContainers = await listAllContainers();
-    const activeContainerIds = allContainers.map((c) => c.Id);
 
     // Get all active sessions with container IDs
     const activeSessions = await TerminalSession.find({
@@ -86,13 +85,20 @@ async function cleanupOrphanedContainers() {
       containerId: { $exists: true, $ne: null },
     }).select("containerId user");
 
-    const sessionContainerIds = activeSessions.map((s) => s.containerId);
+    const activeSessionContainerIds = activeSessions.map((s) => s.containerId);
 
-    // Find orphaned containers (containers without active sessions)
-    const orphanedContainerIds = activeContainerIds.filter(
-      (containerId) => !sessionContainerIds.includes(containerId),
-    );
-
+    // Find orphaned TermiLearn containers only, by matching our session container name pattern
+    const orphanedContainerIds = allContainers
+      .filter((container) =>
+        container.Names.some((name) => name.includes("termilearn-")),
+      )
+      .filter(
+        (container) =>
+          !activeSessionContainerIds.some((sessionId) =>
+            container.Names.some((name) => name.includes(sessionId)),
+          ),
+      )
+      .map((container) => container.Id);
     info(
       `Found ${orphanedContainerIds.length} orphaned containers to clean up`,
     );
